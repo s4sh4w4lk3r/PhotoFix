@@ -2,10 +2,10 @@
 {
     internal class Program
     {
-        private const int YEAR = 2020;
+        private const int YEAR = 2023;
         private static void Main(string[] args)
         {
-            string folderPath = @"D:\fff";
+            string folderPath = @"D:\ffff";
             Init(folderPath);
 
             SetDateTimeFromMetadataOrName();
@@ -42,10 +42,6 @@
 
         private static void SetDateTimeMannualy()
         {
-            if (!MediaEntryRepository.MediaEntries.Any(x => x.Status != MediaEntryStatus.DateTimeNotFound))
-            {
-                return;
-            }
 
             foreach (var entry in MediaEntryRepository.MediaEntries.Where(x=>x.Status != MediaEntryStatus.Done))
             {
