@@ -1,7 +1,4 @@
-﻿using System;
-
-
-namespace PhotoFix.ConsoleApp1
+﻿namespace PhotoFix.ConsoleApp1
 {
     internal class Program
     {
@@ -9,30 +6,15 @@ namespace PhotoFix.ConsoleApp1
         private static void Main(string[] args)
         {
             string folderPath = @"D:\fff";
-            var filePaths = System.IO.Directory.GetFiles(folderPath);
+            Init(folderPath);
 
-            List<MediaDateTime> mediaDateTimeList = [];
+            SetDateTimeFromMetadataOrName();
 
-            foreach (var item in filePaths.Order())
-            {
-                var mediaDateTime = new MediaDateTime(item, GetDateTimeOrDefault(item));
-                mediaDateTimeList.Add(mediaDateTime);
-                Console.WriteLine(mediaDateTime);
-            }
+            SetDateTimeMannualy();
 
-
-            Console.WriteLine($"Total : {mediaDateTimeList.Count}");
-            Console.WriteLine($"Fail : {mediaDateTimeList.Count(x => x.DateTime == default)}");
-
-            Console.Write("Continue? y/n ");
-            bool goNext = Console.ReadKey().Key == ConsoleKey.Y;
-            if (!goNext)
-            {
-                Environment.Exit(0);
-            }
-            mediaDateTimeList = mediaDateTimeList.OrderBy(x => x.IsDefault).ToList();
-            mediaDateTimeList.ForEach(SetLastWrite);
-            Console.WriteLine("Done.");
+            Console.WriteLine("Харош!");
+            MediaEntryRepository.MediaEntries.Clear();
+            MediaEntryRepository.Save();
         }
 
         private static DateTime GetDateTimeOrDefault(string path)
@@ -51,31 +33,36 @@ namespace PhotoFix.ConsoleApp1
 
             return default;
         }
-        private static void SetLastWrite(MediaDateTime mediaDateTime)
+        private static void SetLastWrite(MediaEntry mediaEntry)
         {
-            if (mediaDateTime.IsDefault)
-            {
-                DateTime dateTime = SetDateManually(mediaDateTime.Path, YEAR);
-                if (dateTime == default)
-                {
-                    Console.WriteLine("Skipped.");
-                    return;
-                }
-                File.SetLastWriteTime(mediaDateTime.Path, dateTime);
-                Console.WriteLine($"{mediaDateTime.Path} - Ok.");
-                return;
-            }
-
-            if (File.GetLastWriteTime(mediaDateTime.Path) == mediaDateTime.DateTime)
-            {
-                Console.WriteLine($"{mediaDateTime.Path} - Not required.");
-                return;
-            }
-
-            File.SetLastWriteTime(mediaDateTime.Path, mediaDateTime.DateTime);
-            Console.WriteLine("Ok.");
+            File.SetLastWriteTime(mediaEntry.Path, mediaEntry.DateTime);
+            mediaEntry.Status = MediaEntryStatus.Done;
+            Console.WriteLine($"Файл: {Path.GetFileName(mediaEntry.Path)}, DateTime: {mediaEntry.DateTime}. Применено успешно.");
         }
-        private static DateTime SetDateManually(string path, int year)
+
+        private static void SetDateTimeMannualy()
+        {
+            if (!MediaEntryRepository.MediaEntries.Any(x => x.Status != MediaEntryStatus.DateTimeNotFound))
+            {
+                return;
+            }
+
+            foreach (var entry in MediaEntryRepository.MediaEntries.Where(x=>x.Status != MediaEntryStatus.Done))
+            {
+                DateTime dt = GetDateTimeFromInput(entry.Path, YEAR);
+                if (dt == default)
+                {
+                    entry.Status = MediaEntryStatus.Skipped;
+                }
+                else
+                {
+                    entry.DateTime = dt;
+                    SetLastWrite(entry);
+                    MediaEntryRepository.Save();
+                }
+            }
+        }
+        private static DateTime GetDateTimeFromInput(string path, int year)
         {
             try
             {
@@ -89,16 +76,17 @@ namespace PhotoFix.ConsoleApp1
                 Console.Write($"День: ");
                 int day = int.Parse(Console.ReadLine()!);
 
-                Console.Write("Часы: ");
+/*                Console.Write("Часы: ");
                 int hours = int.Parse(Console.ReadLine()!);
 
                 Console.Write("Минуты: ");
                 int minutes = int.Parse(Console.ReadLine()!);
 
                 Console.Write("Секунды: ");
-                int seconds = int.Parse(Console.ReadLine()!);
+                int seconds = int.Parse(Console.ReadLine()!);*/
 
-                return new DateTime(year, month, day, hours, minutes, seconds);
+                return new DateTime(year, month, day, 11, 11, 11);
+                //return new DateTime(year, month, day, hours, minutes, seconds);
             }
             catch (FormatException)
             {
@@ -112,14 +100,53 @@ namespace PhotoFix.ConsoleApp1
                 return default;
             }
         }
-    }
-    public record class MediaDateTime(string Path, DateTime DateTime)
-    {
-        public bool IsDefault { get => DateTime == default; }
-        public override string ToString()
+        private static void Init(string path)
         {
-            string msg = !IsDefault ? "Success" : "Can't recognize.";
-            return $"{Path} : {DateTime} : {msg}";
+            string[] filePaths = System.IO.Directory.GetFiles(path);
+
+            foreach (string filePath in filePaths)
+            {
+                if (!MediaEntryRepository.MediaEntries.Any(x => x.Path == filePath))
+                {
+                    MediaEntryRepository.MediaEntries.Add(new(filePath, default, MediaEntryStatus.None));
+                }
+            }
+
+            MediaEntryRepository.Save();
+        }
+
+        private static void SetDateTimeFromMetadataOrName()
+        {
+            foreach (var entry in MediaEntryRepository.MediaEntries.Where(x=>x.Status != MediaEntryStatus.Done))
+            {
+                DateTime dt = GetDateTimeOrDefault(entry.Path);
+                if (dt != default)
+                {
+                    entry.DateTime = dt;
+                    entry.Status = MediaEntryStatus.DateTimeFound;
+                    Console.WriteLine($"Файл: {Path.GetFileName(entry.Path)}, DateTime: {entry.DateTime}");
+                    continue;
+                }
+                entry.DateTime = default;
+                entry.Status = MediaEntryStatus.DateTimeNotFound;
+                Console.WriteLine($"Файл: {Path.GetFileName(entry.Path)}, дата и время не получены.");
+            }
+
+            MediaEntryRepository.Save();
+
+            Console.Write("Установить даты для файлов, для которых получена дата и время? y/n ");
+            if (Console.ReadKey().Key != ConsoleKey.Y)
+            {
+                Environment.Exit(0);
+            }
+
+            foreach (var entry in MediaEntryRepository.MediaEntries.Where(x => x.Status == MediaEntryStatus.DateTimeFound))
+            {
+
+                SetLastWrite(entry);
+            }
+
+            MediaEntryRepository.Save();
         }
     }
 }
